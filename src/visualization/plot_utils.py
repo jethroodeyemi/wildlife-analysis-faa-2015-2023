@@ -15,7 +15,7 @@ def set_plotting_style() -> None:
     """
     Set consistent plotting style for all visualizations
     """
-    plt.style.use('seaborn')
+    plt.style.use('seaborn-v0_8')
     sns.set_palette('deep')
     plt.rcParams['figure.figsize'] = (12, 6)
     plt.rcParams['axes.titlesize'] = 14

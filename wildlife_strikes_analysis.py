@@ -150,28 +150,34 @@ print(impact_metrics.nlargest(5, 'risk_score')[['risk_score', 'risk_category']])
 # %%
 print("Analyzing economic impact...")
 
+# Initialize economic impact analyzer
+economic_analyzer = EconomicImpactAnalyzer(df_clean)
+
 # Analyze cost trends
-cost_trends = analyze_cost_trends(df_clean)
+cost_trends = economic_analyzer.analyze_cost_trends()
 print("\nCost Trend Analysis:")
 print(f"Trend coefficient: {cost_trends['trend_coefficient']:.2f}")
-print(f"R-squared: {cost_trends['trend_r2']:.3f}")
+print(f"R-squared: {cost_trends['r_squared']:.3f}")
 
 # Analyze cost distribution
-cost_dist = analyze_cost_distribution(df_clean)
+cost_dist = economic_analyzer.analyze_cost_distribution()
 print("\nCost Distribution Statistics:")
-print(f"Mean cost: ${cost_dist['mean']:,.2f}")
-print(f"Median cost: ${cost_dist['median']:,.2f}")
-print(f"95th percentile: ${cost_dist['percentiles']['95th']:,.2f}")
+print(f"Mean cost: ${cost_dist['percentiles']['percentile_50']:,.2f}")
+print(f"Median cost: ${cost_dist['percentiles']['percentile_50']:,.2f}")
+print(f"95th percentile: ${cost_dist['percentiles']['percentile_95']:,.2f}")
 
-# Calculate risk-adjusted costs
-risk_costs = calculate_risk_adjusted_costs(df_clean)
+# Calculate risk-adjusted costs and forecasts
+summary_report = economic_analyzer.generate_summary_report()
+risk_costs = summary_report['basic_metrics']
 print("\nRisk-Adjusted Cost Analysis:")
-print(risk_costs.head())
+print(f"Total cost: ${risk_costs['total_cost']:,.2f}")
+print(f"Cost per incident: ${risk_costs['cost_per_incident']:,.2f}")
 
 # Forecast future costs
-forecast = forecast_annual_costs(df_clean)
-print("\nCost Forecast (5 years):")
-print(forecast['forecast'])
+forecast_results = economic_analyzer.forecast_future_costs()
+forecast_mean = forecast_results[0]
+print("\nCost Forecast (12 months):")
+print(forecast_mean)
 
 # %% [markdown]
 # ## Operational Impact Analysis
