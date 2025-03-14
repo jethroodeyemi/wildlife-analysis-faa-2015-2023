@@ -69,8 +69,18 @@ df = pd.read_csv('FAA_Wildlife_Strikes_Data_03-30-2025.csv')
 # Validate data quality
 print("\nValidating data quality...")
 validation_report = generate_validation_report(df)
-print(f"Total records: {validation_report['summary']['total_records']:,}")
-print(f"Invalid records: {sum(validation_report['summary'].values()) - validation_report['summary']['total_records']:,}")
+total_records = validation_report['summary']['total_records']
+
+# Calculate invalid records by summing all validation issues
+invalid_count = sum(
+    len(issues) if isinstance(issues, list) else 
+    len(issues.keys()) if isinstance(issues, dict) else 0
+    for key, issues in validation_report.items()
+    if key != 'summary'
+)
+
+print(f"Total records: {total_records:,}")
+print(f"Invalid records: {invalid_count:,}")
 
 # Process and clean data
 print("\nProcessing and cleaning data...")
