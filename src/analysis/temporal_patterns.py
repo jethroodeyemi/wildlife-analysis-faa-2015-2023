@@ -11,16 +11,16 @@ import statsmodels.api as sm
 
 def analyze_long_term_trends(
     df: pd.DataFrame,
-    freq: str = 'M'
+    freq: str = 'ME'
 ) -> Dict[str, Dict[str, float]]:
     """
     Analyze long-term trends in various metrics
     """
     metrics = {
         'incident_count': lambda x: len(x),
-        'damage_rate': lambda x: x['HAS_DAMAGE'].mean(),
+        'damage_rate': lambda x: x['INDICATED_DAMAGE'].mean(),
         'avg_cost': lambda x: x['TOTAL_COST'].mean(),
-        'severe_damage_rate': lambda x: (x['DAMAGE'] == 'S').mean()
+        'severe_damage_rate': lambda x: (x['DAMAGE_LEVEL'] == 'S').mean()
     }
     
     results = {}
@@ -50,7 +50,7 @@ def analyze_long_term_trends(
 
 def analyze_cyclical_patterns(
     df: pd.DataFrame,
-    freq: str = 'M'
+    freq: str = 'ME'
 ) -> Dict[str, pd.Series]:
     """
     Analyze cyclical patterns in the data
@@ -87,13 +87,13 @@ def analyze_monthly_patterns(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Analyze monthly patterns in various metrics
     """
-    monthly_metrics = df.groupby('MONTH').agg({
-        'INDEX NR': 'count',
-        'DAMAGE_SCORE': ['mean', 'std'],
+    monthly_metrics = df.groupby('INCIDENT_MONTH').agg({
+        'INDEX_NR': 'count',
+        'COST_REPAIRS': ['mean', 'std'],
         'TOTAL_COST': ['mean', 'sum'],
         'HEIGHT': 'mean',
         'SPEED': 'mean',
-        'HAS_DAMAGE': 'mean'
+        'INDICATED_DAMAGE': 'mean'
     })
     
     # Flatten column names
@@ -128,26 +128,26 @@ def analyze_time_of_day_patterns(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     
     # Analyze patterns by time of day
     time_metrics = df.groupby('TIME_BIN').agg({
-        'INDEX NR': 'count',
-        'DAMAGE_SCORE': ['mean', 'std'],
+        'INDEX_NR': 'count',
+        'COST_REPAIRS': ['mean', 'std'],
         'TOTAL_COST': ['mean', 'sum'],
         'HEIGHT': 'mean',
         'SPEED': 'mean',
-        'HAS_DAMAGE': 'mean'
+        'INDICATED_DAMAGE': 'mean'
     })
     
     # Flatten column names
     time_metrics.columns = ['_'.join(col).strip() for col in time_metrics.columns.values]
     
     # Calculate relative risk by time of day
-    overall_damage_rate = df['HAS_DAMAGE'].mean()
+    overall_damage_rate = df['INDICATED_DAMAGE'].mean()
     time_metrics['relative_risk'] = (
-        time_metrics['HAS_DAMAGE_mean'] / overall_damage_rate
+        time_metrics['INDICATED_DAMAGE_mean'] / overall_damage_rate
     )
     
     return {
         'time_metrics': time_metrics,
-        'peak_time': time_metrics['INDEX NR_count'].idxmax(),
+        'peak_time': time_metrics['INDEX_NR_count'].idxmax(),
         'highest_risk_time': time_metrics['relative_risk'].idxmax()
     }
 
@@ -160,13 +160,13 @@ def analyze_multi_year_patterns(
     """
     # Create year and month columns
     df['YEAR'] = pd.to_datetime(df['INCIDENT_DATE']).dt.year
-    df['MONTH'] = pd.to_datetime(df['INCIDENT_DATE']).dt.month
+    df['INCIDENT_MONTH'] = pd.to_datetime(df['INCIDENT_DATE']).dt.month
     
     # Create pivot table for month-year analysis
     monthly_counts = pd.pivot_table(
         df,
-        values='INDEX NR',
-        index='MONTH',
+        values='INDEX_NR',
+        index='INCIDENT_MONTH',
         columns='YEAR',
         aggfunc='count',
         fill_value=0
@@ -174,18 +174,18 @@ def analyze_multi_year_patterns(
     
     # Calculate year-over-year changes
     yoy_changes = df.groupby('YEAR').agg({
-        'INDEX NR': 'count',
+        'INDEX_NR': 'count',
         'TOTAL_COST': 'sum',
-        'DAMAGE_SCORE': 'mean'
+        'COST_REPAIRS': 'mean'
     }).pct_change()
     
     # Identify long-term patterns
     long_term_patterns = pd.DataFrame()
     
     # Calculate average monthly pattern for each metric
-    for metric in ['INDEX NR', 'DAMAGE_SCORE', 'TOTAL_COST']:
-        monthly_avg = df.groupby('MONTH')[metric].mean()
-        monthly_std = df.groupby('MONTH')[metric].std()
+    for metric in ['INDEX_NR', 'COST_REPAIRS', 'TOTAL_COST']:
+        monthly_avg = df.groupby('INCIDENT_MONTH')[metric].mean()
+        monthly_std = df.groupby('INCIDENT_MONTH')[metric].std()
         
         long_term_patterns[f'{metric}_avg'] = monthly_avg
         long_term_patterns[f'{metric}_std'] = monthly_std

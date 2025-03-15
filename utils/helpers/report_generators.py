@@ -148,24 +148,41 @@ class ReportGenerator:
         """
         import folium
         
+        # Filter out rows with NaN values in lat/lon columns
+        df_filtered = df.dropna(subset=[lat_col, lon_col]).copy()
+        
+        if len(df_filtered) == 0:
+            print(f"Warning: No valid coordinates found for mapping. Map creation skipped.")
+            return
+        
         # Create base map
-        center_lat = df[lat_col].mean()
-        center_lon = df[lon_col].mean()
+        center_lat = df_filtered[lat_col].mean()
+        center_lon = df_filtered[lon_col].mean()
         m = folium.Map(location=[center_lat, center_lon], zoom_start=4)
         
         # Add points
-        for idx, row in df.iterrows():
-            popup_text = '<br>'.join([
-                f'{col}: {row[col]}'
-                for col in df.columns
-                if col not in [lat_col, lon_col]
-            ])
+        for idx, row in df_filtered.iterrows():
+            # Create popup content with available data
+            popup_content = []
+            for col in df_filtered.columns:
+                if col not in [lat_col, lon_col]:
+                    value = row[col]
+                    if pd.notna(value):  # Only include non-NaN values
+                        popup_content.append(f"{col}: {value}")
+            
+            popup_text = '<br>'.join(popup_content)
+            
+            # Determine color based on color_col if provided
+            if color_col and color_col in df_filtered.columns:
+                color = 'red' if pd.notna(row[color_col]) and row[color_col] > df_filtered[color_col].mean() else 'blue'
+            else:
+                color = 'blue'
             
             folium.CircleMarker(
                 location=[row[lat_col], row[lon_col]],
                 radius=5,
                 popup=popup_text,
-                color='red' if color_col and row[color_col] > df[color_col].mean() else 'blue'
+                color=color
             ).add_to(m)
         
         # Save map
@@ -337,12 +354,37 @@ class ReportInsightGenerator:
         """
         insight = {
             'category': 'Risk Assessment',
-            'metrics': {
-                'high_risk_airports': len(risk_metrics[risk_metrics['risk_score'] > risk_metrics['risk_score'].mean()]),
-                'damage_rate': safety_metrics.get('damage_rate', 0)
-            },
-            'severity': 'high' if safety_metrics.get('damage_rate', 0) > 0.3 else 'medium'
+            'metrics': {},
+            'severity': 'medium'
         }
+        
+        # Use risk_score if available, otherwise use another metric
+        if 'risk_score' in risk_metrics.columns:
+            high_risk_count = len(risk_metrics[risk_metrics['risk_score'] > risk_metrics['risk_score'].quantile(0.75)])
+            insight['metrics']['high_risk_airports'] = high_risk_count
+        else:
+            # Fallback to using any damage-related column
+            potential_cols = ['INDICATED_DAMAGE', 'DAMAGE_SCORE', 'TOTAL_COST']
+            for col in potential_cols:
+                if col in risk_metrics.columns:
+                    high_risk_count = len(risk_metrics[risk_metrics[col] > risk_metrics[col].mean()])
+                    insight['metrics']['high_risk_airports'] = high_risk_count
+                    break
+            else:
+                # If no suitable column found
+                insight['metrics']['high_risk_airports'] = 0
+        
+        # Get damage rate from safety metrics or risk metrics
+        if 'damage_rate' in safety_metrics:
+            insight['metrics']['damage_rate'] = safety_metrics['damage_rate']
+        elif 'INDICATED_DAMAGE' in risk_metrics.columns:
+            insight['metrics']['damage_rate'] = risk_metrics['INDICATED_DAMAGE'].mean()
+        else:
+            insight['metrics']['damage_rate'] = 0
+            
+        # Set severity based on damage rate
+        if insight['metrics']['damage_rate'] > 0.3:
+            insight['severity'] = 'high'
         
         insight['description'] = (
             f"Identified {insight['metrics']['high_risk_airports']} high-risk airports. "
@@ -395,7 +437,10 @@ class ReportInsightGenerator:
         insight = {
             'category': 'Species Patterns',
             'metrics': {
-                'high_risk_species': len(species_metrics[species_metrics['risk_score'] > species_metrics['risk_score'].mean()]),
+                'high_risk_species': len(
+                    species_metrics[species_metrics['NUM_STRUCK'] >
+                                    species_metrics['NUM_STRUCK'].mean()]
+                ),
                 'seasonal_concentration': temporal_metrics['seasonal_concentration']
             },
             'severity': 'high' if temporal_metrics['seasonal_concentration'] > 0.7 else 'medium'

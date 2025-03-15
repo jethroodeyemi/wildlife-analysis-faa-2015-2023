@@ -85,6 +85,7 @@ print(f"Invalid records: {invalid_count:,}")
 # Process and clean data
 print("\nProcessing and cleaning data...")
 df_clean = process_wildlife_data(df)
+df_clean['TOTAL_COST'] = df_clean['COST_REPAIRS'].fillna(0) + df_clean['COST_OTHER'].fillna(0)
 
 # %% [markdown]
 # ## Temporal Analysis
@@ -239,8 +240,8 @@ risk_insight = insight_generator.analyze_risk_patterns(
 
 # Generate economic insights
 economic_insight = insight_generator.analyze_economic_impact(
-    {'total_cost': cost_dist['mean'] * len(df_clean),
-     'mean_cost': cost_dist['mean']},
+    {'total_cost': cost_dist['percentiles']['percentile_50'] * len(df_clean),
+     'mean_cost': cost_dist['percentiles']['percentile_50']},
     {'trend_increasing': cost_trends['trend_coefficient'] > 0,
      'annual_growth_rate': cost_trends['trend_coefficient']}
 )
@@ -280,7 +281,7 @@ report_gen = ReportGenerator(OUTPUT_DIR)
 # Save time series plots
 report_gen.save_timeseries_plot(
     df_clean,
-    'INDEX NR',
+    'INDEX_NR',
     'Wildlife Strikes Trend (1990-2023)',
     'strikes_trend',
     rolling_window=12
@@ -300,14 +301,14 @@ report_gen.save_interactive_map(
     'AIRPORT_LONGITUDE',
     'Wildlife Strike Geographic Distribution',
     'strike_distribution',
-    color_col='DAMAGE_SCORE'
+    color_col='INDICATED_DAMAGE'
 )
 
 # Save summary statistics
 report_gen.save_summary_stats(
     df_clean,
     group_col='SPECIES',
-    metrics=['TOTAL_COST', 'DAMAGE_SCORE', 'HEIGHT', 'SPEED'],
+    metrics=['TOTAL_COST', 'INDICATED_DAMAGE', 'HEIGHT', 'SPEED'],
     filename='species_summary'
 )
 

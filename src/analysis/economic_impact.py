@@ -21,10 +21,13 @@ class EconomicImpactAnalyzer:
         Prepare data for economic analysis
         """
         # Convert cost columns to numeric, replacing non-numeric values with NaN
-        cost_columns = ['COST_REPAIRS', 'COST_OTHER', 'COST_TOTAL']
+        cost_columns = ['COST_REPAIRS', 'COST_OTHER']
         for col in cost_columns:
             if col in self.df.columns:
                 self.df[col] = pd.to_numeric(self.df[col], errors='coerce')
+        if 'COST_TOTAL' not in self.df.columns:
+            self.df['COST_TOTAL'] = (self.df['COST_REPAIRS'].fillna(0)
+                                     + self.df['COST_OTHER'].fillna(0))
         
         # Create monthly and yearly aggregations
         if 'INCIDENT_DATE' in self.df.columns:
@@ -120,25 +123,25 @@ class EconomicImpactAnalyzer:
         factors = {}
         
         # Analyze cost by aircraft size
-        if 'AIRCRAFT_MASS' in self.df.columns:
+        if 'AC_MASS' in self.df.columns:
             factors['cost_by_aircraft_size'] = (
-                self.df.groupby('AIRCRAFT_MASS')['COST_TOTAL']
+                self.df.groupby('AC_MASS')['COST_TOTAL']
                 .agg(['mean', 'count', 'sum'])
                 .to_dict()
             )
         
         # Analyze cost by strike location
-        if 'STRIKE_LOCATION' in self.df.columns:
+        if 'LOCATION' in self.df.columns:
             factors['cost_by_location'] = (
-                self.df.groupby('STRIKE_LOCATION')['COST_TOTAL']
+                self.df.groupby('LOCATION')['COST_TOTAL']
                 .agg(['mean', 'count', 'sum'])
                 .to_dict()
             )
         
         # Analyze cost by flight phase
-        if 'FLIGHT_PHASE' in self.df.columns:
+        if 'PHASE_OF_FLIGHT' in self.df.columns:
             factors['cost_by_phase'] = (
-                self.df.groupby('FLIGHT_PHASE')['COST_TOTAL']
+                self.df.groupby('PHASE_OF_FLIGHT')['COST_TOTAL']
                 .agg(['mean', 'count', 'sum'])
                 .to_dict()
             )

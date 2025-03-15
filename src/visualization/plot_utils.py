@@ -37,7 +37,7 @@ def plot_temporal_trends(
     fig, ax = plt.subplots(figsize=(14, 7))
     
     # Create time series
-    ts = df.groupby(pd.Grouper(key='INCIDENT_DATE', freq=freq))['INDEX NR'].count()
+    ts = df.groupby(pd.Grouper(key='INCIDENT_DATE', freq=freq))['INDEX_NR'].count()
     
     # Plot raw data
     ax.plot(ts.index, ts.values, alpha=0.5, label='Raw Data')
@@ -69,6 +69,9 @@ def plot_geographic_distribution(
     center_lat = df['AIRPORT_LATITUDE'].mean()
     center_lon = df['AIRPORT_LONGITUDE'].mean()
     
+    df = df.copy()
+    df['TOTAL_COST'] = df['COST_REPAIRS_INFL_ADJ'].fillna(0) + df['COST_OTHER_INFL_ADJ'].fillna(0)
+    
     if color_metric:
         fig = px.scatter_mapbox(
             df,
@@ -76,7 +79,7 @@ def plot_geographic_distribution(
             lon='AIRPORT_LONGITUDE',
             color=color_metric,
             title='Geographic Distribution of Wildlife Strikes',
-            hover_data=['AIRPORT', 'TOTAL_COST', 'DAMAGE']
+            hover_data=['AIRPORT', 'TOTAL_COST', 'DAMAGE_LEVEL']
         )
     else:
         fig = px.scatter_mapbox(
@@ -84,7 +87,7 @@ def plot_geographic_distribution(
             lat='AIRPORT_LATITUDE',
             lon='AIRPORT_LONGITUDE',
             title='Geographic Distribution of Wildlife Strikes',
-            hover_data=['AIRPORT', 'TOTAL_COST', 'DAMAGE']
+            hover_data=['AIRPORT', 'TOTAL_COST', 'DAMAGE_LEVEL']
         )
     
     fig.update_layout(
@@ -153,6 +156,9 @@ def plot_cost_analysis(
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
     
+    df = df.copy()
+    df['TOTAL_COST'] = df['COST_REPAIRS_INFL_ADJ'].fillna(0) + df['COST_OTHER_INFL_ADJ'].fillna(0)
+    
     # Plot histogram of costs
     sns.histplot(
         data=df,
@@ -192,28 +198,28 @@ def plot_temporal_patterns(
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
     
     # Monthly pattern
-    monthly_counts = df.groupby('MONTH')['INDEX NR'].count()
+    monthly_counts = df.groupby('INCIDENT_MONTH')['INDEX_NR'].count()
     sns.barplot(x=monthly_counts.index, y=monthly_counts.values, ax=ax1)
     ax1.set_title('Monthly Distribution')
     ax1.set_xlabel('Month')
     ax1.set_ylabel('Number of Strikes')
     
     # Time of day pattern
-    time_counts = df.groupby('TIME_OF_DAY')['INDEX NR'].count()
+    time_counts = df.groupby('TIME_OF_DAY')['INDEX_NR'].count()
     sns.barplot(x=time_counts.index, y=time_counts.values, ax=ax2)
     ax2.set_title('Time of Day Distribution')
     ax2.set_xlabel('Time of Day')
     ax2.set_ylabel('Number of Strikes')
     
     # Yearly trend
-    yearly_counts = df.groupby('YEAR')['INDEX NR'].count()
+    yearly_counts = df.groupby('INCIDENT_YEAR')['INDEX_NR'].count()
     ax3.plot(yearly_counts.index, yearly_counts.values)
     ax3.set_title('Yearly Trend')
     ax3.set_xlabel('Year')
     ax3.set_ylabel('Number of Strikes')
     
     # Phase of flight
-    phase_counts = df.groupby('PHASE_OF_FLT')['INDEX NR'].count()
+    phase_counts = df.groupby('PHASE_OF_FLIGHT')['INDEX_NR'].count()
     sns.barplot(x=phase_counts.values, y=phase_counts.index, ax=ax4)
     ax4.set_title('Phase of Flight Distribution')
     ax4.set_xlabel('Number of Strikes')
@@ -235,14 +241,17 @@ def plot_damage_analysis(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
     
     # Damage type distribution
-    damage_counts = df['DAMAGE'].value_counts()
+    damage_counts = df['DAMAGE_LEVEL'].value_counts()
     sns.barplot(x=damage_counts.index, y=damage_counts.values, ax=ax1)
     ax1.set_title('Distribution of Damage Types')
     ax1.set_xlabel('Damage Category')
     ax1.set_ylabel('Number of Incidents')
     
+    df = df.copy()
+    df['TOTAL_COST'] = df['COST_REPAIRS_INFL_ADJ'].fillna(0) + df['COST_OTHER_INFL_ADJ'].fillna(0)
+    
     # Cost by damage type
-    sns.boxplot(data=df, x='DAMAGE', y='TOTAL_COST', ax=ax2)
+    sns.boxplot(data=df, x='DAMAGE_LEVEL', y='TOTAL_COST', ax=ax2)
     ax2.set_yscale('log')
     ax2.set_title('Cost Distribution by Damage Type')
     ax2.set_xlabel('Damage Category')
@@ -266,7 +275,7 @@ def create_summary_dashboard(
     
     # Time series trend
     ax1 = fig.add_subplot(gs[0, :])
-    ts = df.groupby(pd.Grouper(key='INCIDENT_DATE', freq='M'))['INDEX NR'].count()
+    ts = df.groupby(pd.Grouper(key='INCIDENT_DATE', freq='M'))['INDEX_NR'].count()
     ax1.plot(ts.index, ts.values)
     ax1.set_title('Strike Incidents Over Time')
     
@@ -278,9 +287,12 @@ def create_summary_dashboard(
     
     # Damage distribution
     ax3 = fig.add_subplot(gs[1, 1])
-    damage_counts = df['DAMAGE'].value_counts()
+    damage_counts = df['DAMAGE_LEVEL'].value_counts()
     sns.barplot(x=damage_counts.index, y=damage_counts.values, ax=ax3)
     ax3.set_title('Damage Distribution')
+    
+    df = df.copy()
+    df['TOTAL_COST'] = df['COST_REPAIRS_INFL_ADJ'].fillna(0) + df['COST_OTHER_INFL_ADJ'].fillna(0)
     
     # Cost distribution
     ax4 = fig.add_subplot(gs[1, 2])
@@ -290,7 +302,7 @@ def create_summary_dashboard(
     
     # Phase of flight
     ax5 = fig.add_subplot(gs[2, :])
-    phase_counts = df.groupby('PHASE_OF_FLT')['INDEX NR'].count()
+    phase_counts = df.groupby('PHASE_OF_FLIGHT')['INDEX_NR'].count()
     sns.barplot(x=phase_counts.index, y=phase_counts.values, ax=ax5)
     ax5.set_title('Strikes by Phase of Flight')
     ax5.tick_params(axis='x', rotation=45)

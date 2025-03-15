@@ -27,8 +27,7 @@ class WildlifeStrikeRiskPredictor:
         ]
         
         categorical_features = [
-            'OPERATOR_CATEGORY', 'AC_CLASS', 'TYPE_ENG', 'TIME_OF_DAY',
-            'SEASON', 'SPECIES'
+            'OPERATOR', 'AC_CLASS', 'TYPE_ENG', 'TIME_OF_DAY', 'SPECIES'
         ]
         
         # Create preprocessing steps
@@ -160,12 +159,13 @@ def prepare_training_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, pd
     # Select features
     features = [
         'HEIGHT', 'SPEED', 'DISTANCE', 'AC_MASS', 'NUM_ENGS',
-        'OPERATOR_CATEGORY', 'AC_CLASS', 'TYPE_ENG', 'TIME_OF_DAY',
-        'SEASON', 'SPECIES'
+        'AC_CLASS', 'TYPE_ENG', 'TIME_OF_DAY', 'SPECIES',
+        'OPERATOR'
     ]
     
     X = df[features]
-    y_damage = df['HAS_DAMAGE']
+    df['TOTAL_COST'] = df[['COST_REPAIRS_INFL_ADJ', 'COST_OTHER_INFL_ADJ']].sum(axis=1)
+    y_damage = df['INDICATED_DAMAGE']
     y_cost = df['TOTAL_COST']
     
     return X, y_damage, y_cost

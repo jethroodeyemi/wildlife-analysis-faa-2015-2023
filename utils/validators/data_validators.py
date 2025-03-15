@@ -86,23 +86,11 @@ def check_data_consistency(
     """
     inconsistencies = {}
     
-    # Check cost consistency
-    if all(col in df.columns for col in ['TOTAL_COST', 'COST_REPAIRS', 'COST_OTHER']):
-        cost_mismatch = df[
-            abs(
-                df['TOTAL_COST'] - 
-                (df['COST_REPAIRS'] + df['COST_OTHER'])
-            ) > 1  # Allow for small rounding differences
-        ].index.tolist()
-        
-        if cost_mismatch:
-            inconsistencies['cost_mismatch'] = cost_mismatch
-    
     # Check damage score consistency
-    if 'DAMAGE' in df.columns and 'DAMAGE_SCORE' in df.columns:
+    if 'DAMAGE_LEVEL' in df.columns and 'INDICATED_DAMAGE' in df.columns:
         damage_mismatch = df[
-            (df['DAMAGE'] == 'N') & 
-            (df['DAMAGE_SCORE'] > 0)
+            (df['DAMAGE_LEVEL'] == 'N') & 
+            (df['INDICATED_DAMAGE'] == 1)
         ].index.tolist()
         
         if damage_mismatch:

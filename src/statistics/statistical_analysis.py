@@ -26,7 +26,7 @@ def perform_hypothesis_tests(df: pd.DataFrame) -> Dict[str, Dict[str, float]]:
     }
     
     # Test 2: Is there a relationship between damage severity and aircraft size?
-    damage_by_size = pd.crosstab(df['AC_MASS'], df['DAMAGE'])
+    damage_by_size = pd.crosstab(df['AC_MASS'], df['DAMAGE_LEVEL'])
     chi2, p_value = stats.chi2_contingency(damage_by_size)[:2]
     test_results['damage_size_relationship'] = {
         'statistic': chi2,
@@ -50,7 +50,7 @@ def analyze_cost_distribution(df: pd.DataFrame) -> Dict[str, float]:
     """
     Analyze the statistical distribution of costs
     """
-    costs = df['TOTAL_COST'].dropna()
+    costs = df['COST_REPAIRS'].fillna(0) + df['COST_OTHER'].fillna(0)
     
     # Test for normality
     normality_stat, normality_p = stats.normaltest(costs)
@@ -81,7 +81,7 @@ def perform_trend_analysis(
     ts = df.groupby(pd.Grouper(key='INCIDENT_DATE', freq=frequency))[metric].mean()
     
     # Perform Mann-Kendall trend test
-    trend, h, p, z = stats.kendalltau(ts.index.astype(int), ts.values)
+    trend, h, p, z = stats.kendalltau(ts.index.to_julian_date(), ts.values)
     
     # Calculate seasonal decomposition
     decomp = seasonal_decompose(ts, period=12)
@@ -152,8 +152,8 @@ def calculate_confidence_intervals(
     intervals['overall'] = (ci[0], ci[1])
     
     # Confidence intervals by damage category
-    for damage_type in df['DAMAGE'].unique():
-        damage_data = df[df['DAMAGE'] == damage_type][metric].dropna()
+    for damage_type in df['DAMAGE_LEVEL'].unique():
+        damage_data = df[df['DAMAGE_LEVEL'] == damage_type][metric].dropna()
         if len(damage_data) > 1:  # Need at least 2 points for CI
             mean = damage_data.mean()
             sem = stats.sem(damage_data)
@@ -217,11 +217,12 @@ def calculate_risk_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate risk metrics for different categories
     """
-    risk_metrics = df.groupby(['OPERATOR_CATEGORY', 'AC_CLASS']).agg({
-        'INDEX NR': 'count',
+    risk_metrics = df.groupby(['OPERATOR', 'AC_CLASS']).agg({
+        'INDEX_NR': 'count',
         'DAMAGE_SCORE': ['mean', 'std'],
-        'TOTAL_COST': ['sum', 'mean'],
-        'HAS_DAMAGE': 'mean'
+        'COST_REPAIRS': ['sum', 'mean'],
+        'COST_OTHER': ['sum', 'mean'],
+        'INDICATED_DAMAGE': 'mean'
     })
     
     # Flatten column names
@@ -230,8 +231,8 @@ def calculate_risk_metrics(df: pd.DataFrame) -> pd.DataFrame:
     # Calculate risk score
     risk_metrics['risk_score'] = (
         risk_metrics['DAMAGE_SCORE_mean'] * 
-        risk_metrics['HAS_DAMAGE_mean'] * 
-        np.log1p(risk_metrics['TOTAL_COST_mean'])
+        risk_metrics['INDICATED_DAMAGE_mean'] * 
+        np.log1p(risk_metrics['COST_REPAIRS_mean'] + risk_metrics['COST_OTHER_mean'])
     )
     
     return risk_metrics
@@ -241,12 +242,13 @@ def perform_species_analysis(df: pd.DataFrame) -> pd.DataFrame:
     Analyze wildlife species impact and patterns
     """
     species_analysis = df.groupby('SPECIES').agg({
-        'INDEX NR': 'count',
+        'INDEX_NR': 'count',
         'DAMAGE_SCORE': ['mean', 'std'],
-        'TOTAL_COST': ['sum', 'mean'],
+        'COST_REPAIRS': ['sum', 'mean'],
+        'COST_OTHER': ['sum', 'mean'],
         'HEIGHT': ['mean', 'median'],
         'SPEED': ['mean', 'median'],
-        'HAS_DAMAGE': 'mean'
+        'INDICATED_DAMAGE': 'mean'
     })
     
     # Flatten column names
@@ -254,7 +256,7 @@ def perform_species_analysis(df: pd.DataFrame) -> pd.DataFrame:
     
     # Calculate strike rate per 10,000 incidents
     total_incidents = len(df)
-    species_analysis['strike_rate'] = (species_analysis['INDEX NR_count'] / total_incidents) * 10000
+    species_analysis['strike_rate'] = (species_analysis['INDEX_NR_count'] / total_incidents) * 10000
     
     return species_analysis
 
@@ -266,10 +268,11 @@ def analyze_geographic_patterns(
     """
     # Regional analysis
     regional_analysis = df.groupby(['STATE', 'FAAREGION']).agg({
-        'INDEX NR': 'count',
+        'INDEX_NR': 'count',
         'DAMAGE_SCORE': 'mean',
-        'TOTAL_COST': ['sum', 'mean'],
-        'HAS_DAMAGE': 'mean'
+        'COST_REPAIRS': ['sum', 'mean'],
+        'COST_OTHER': ['sum', 'mean'],
+        'INDICATED_DAMAGE': 'mean'
     })
     
     # Calculate spatial statistics
@@ -336,30 +339,23 @@ def calculate_temporal_risk_factors(
     
     # Time of day analysis
     tod_risk = df.groupby('TIME_OF_DAY').agg({
-        'INDEX NR': 'count',
+        'INDEX_NR': 'count',
         'DAMAGE_SCORE': 'mean',
-        'HAS_DAMAGE': 'mean',
-        'TOTAL_COST': 'mean'
-    })
-    
-    # Seasonal analysis
-    season_risk = df.groupby('SEASON').agg({
-        'INDEX NR': 'count',
-        'DAMAGE_SCORE': 'mean',
-        'HAS_DAMAGE': 'mean',
-        'TOTAL_COST': 'mean'
+        'INDICATED_DAMAGE': 'mean',
+        'COST_REPAIRS': 'mean',
+        'COST_OTHER': 'mean'
     })
     
     # Monthly analysis
-    month_risk = df.groupby('MONTH').agg({
-        'INDEX NR': 'count',
+    month_risk = df.groupby('INCIDENT_MONTH').agg({
+        'INDEX_NR': 'count',
         'DAMAGE_SCORE': 'mean',
-        'HAS_DAMAGE': 'mean',
-        'TOTAL_COST': 'mean'
+        'INDICATED_DAMAGE': 'mean',
+        'COST_REPAIRS': 'mean',
+        'COST_OTHER': 'mean'
     })
     
     return {
         'time_of_day': tod_risk,
-        'seasonal': season_risk,
         'monthly': month_risk
     }

@@ -13,7 +13,7 @@ def clean_dates(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     # Convert date columns
     df['INCIDENT_DATE'] = pd.to_datetime(df['INCIDENT_DATE'])
-    df['REPORTED_DATE'] = pd.to_datetime(df['REPORTED_DATE'])
+    df['LUPDATE'] = pd.to_datetime(df['LUPDATE'])
     
     # Extract time components
     df['YEAR'] = df['INCIDENT_DATE'].dt.year
@@ -56,7 +56,7 @@ def clean_categorical_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     
     # Standardize damage codes
-    df['DAMAGE'] = df['DAMAGE'].fillna('').str.strip().str.upper()
+    df['DAMAGE_LEVEL'] = df['DAMAGE_LEVEL'].fillna('').str.strip().str.upper()
     
     # Clean operator types
     df['OPERATOR'] = df['OPERATOR'].fillna('UNKNOWN')
@@ -101,14 +101,14 @@ def create_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     
     # Severity score (based on damage and costs)
     damage_scores = {'': 0, 'N': 0, 'M': 1, 'M?': 1, 'S': 2, 'D': 3}
-    df['DAMAGE_SCORE'] = df['DAMAGE'].map(damage_scores)
+    df['DAMAGE_SCORE'] = df['DAMAGE_LEVEL'].map(damage_scores)
     
     # Calculate time between incident and report
-    df['REPORT_DELAY_DAYS'] = (pd.to_datetime(df['REPORTED_DATE']) - 
+    df['REPORT_DELAY_DAYS'] = (pd.to_datetime(df['LUPDATE']) - 
                               pd.to_datetime(df['INCIDENT_DATE'])).dt.days
     
     # Create impact indicators
-    df['HAS_DAMAGE'] = df['DAMAGE'].isin(['M', 'M?', 'S', 'D'])
+    df['HAS_DAMAGE'] = df['DAMAGE_LEVEL'].isin(['M', 'M?', 'S', 'D'])
     df['HIGH_COST'] = df['TOTAL_COST'] > df['TOTAL_COST'].median()
     
     return df

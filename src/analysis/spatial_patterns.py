@@ -10,15 +10,15 @@ from geopy.distance import geodesic
 import geopandas as gpd
 from shapely.geometry import Point
 
+
 def analyze_airport_risk_factors(df: pd.DataFrame) -> pd.DataFrame:
     """
     Analyze risk factors specific to airports
     """
     airport_metrics = df.groupby('AIRPORT').agg({
-        'INDEX NR': 'count',
-        'DAMAGE_SCORE': ['mean', 'std'],
+        'INDEX_NR': 'count',
+        'INDICATED_DAMAGE': 'mean',
         'TOTAL_COST': ['sum', 'mean'],
-        'HAS_DAMAGE': 'mean',
         'AIRPORT_LATITUDE': 'first',
         'AIRPORT_LONGITUDE': 'first'
     })
@@ -28,12 +28,11 @@ def analyze_airport_risk_factors(df: pd.DataFrame) -> pd.DataFrame:
     
     # Calculate incident rate (normalize by total incidents)
     total_incidents = len(df)
-    airport_metrics['incident_rate'] = airport_metrics['INDEX NR_count'] / total_incidents
+    airport_metrics['incident_rate'] = airport_metrics['INDEX_NR_count'] / total_incidents
     
     # Calculate risk score
     airport_metrics['risk_score'] = (
-        airport_metrics['DAMAGE_SCORE_mean'] * 
-        airport_metrics['HAS_DAMAGE_mean'] * 
+        airport_metrics['INDICATED_DAMAGE_mean'] * 
         np.log1p(airport_metrics['TOTAL_COST_mean'])
     )
     
@@ -47,8 +46,15 @@ def identify_spatial_clusters(
     """
     Identify spatial clusters of wildlife strikes
     """
-    # Create coordinates array
-    coords = df[['AIRPORT_LATITUDE', 'AIRPORT_LONGITUDE']].values
+    # Create coordinates array and filter out rows with missing coordinates
+    df_valid = df.dropna(subset=['AIRPORT_LATITUDE', 'AIRPORT_LONGITUDE'])
+    
+    # Check if we have enough valid data points to perform clustering
+    if len(df_valid) < min_samples:
+        print(f"Warning: Not enough valid coordinates for clustering. Found {len(df_valid)} valid points.")
+        return pd.DataFrame()
+        
+    coords = df_valid[['AIRPORT_LATITUDE', 'AIRPORT_LONGITUDE']].values
     
     # Perform DBSCAN clustering
     db = DBSCAN(
@@ -58,13 +64,12 @@ def identify_spatial_clusters(
     ).fit(np.radians(coords))
     
     # Add cluster labels to dataframe
-    df_clustered = df.copy()
+    df_clustered = df_valid.copy()
     df_clustered['cluster'] = db.labels_
     
     # Analyze clusters
     cluster_metrics = df_clustered[df_clustered['cluster'] != -1].groupby('cluster').agg({
-        'INDEX NR': 'count',
-        'DAMAGE_SCORE': 'mean',
+        'INDEX_NR': 'count',
         'TOTAL_COST': 'sum',
         'AIRPORT_LATITUDE': 'mean',
         'AIRPORT_LONGITUDE': 'mean',
@@ -81,26 +86,23 @@ def analyze_regional_patterns(
     """
     # Regional analysis
     regional_metrics = df.groupby('FAAREGION').agg({
-        'INDEX NR': 'count',
-        'DAMAGE_SCORE': ['mean', 'std'],
+        'INDEX_NR': 'count',
         'TOTAL_COST': ['sum', 'mean'],
-        'HAS_DAMAGE': 'mean'
+        'INDICATED_DAMAGE': 'mean'
     })
     
     # State analysis
     state_metrics = df.groupby('STATE').agg({
-        'INDEX NR': 'count',
-        'DAMAGE_SCORE': ['mean', 'std'],
+        'INDEX_NR': 'count',
         'TOTAL_COST': ['sum', 'mean'],
-        'HAS_DAMAGE': 'mean'
+        'INDICATED_DAMAGE': 'mean'
     })
     
     # Calculate regional risk scores
     for metrics in [regional_metrics, state_metrics]:
         metrics.columns = ['_'.join(col).strip() for col in metrics.columns.values]
         metrics['risk_score'] = (
-            metrics['DAMAGE_SCORE_mean'] * 
-            metrics['HAS_DAMAGE_mean'] * 
+            metrics['INDICATED_DAMAGE_mean'] * 
             np.log1p(metrics['TOTAL_COST_mean'])
         )
     
@@ -116,23 +118,34 @@ def calculate_spatial_correlations(
     """
     Calculate spatial correlations between incidents
     """
+    # Filter rows with missing coordinates or metrics
+    df_valid = df.dropna(subset=['AIRPORT_LATITUDE', 'AIRPORT_LONGITUDE', 'TOTAL_COST', 'INDICATED_DAMAGE'])
+    
+    # Check if we have enough valid data points
+    if len(df_valid) < 2:
+        print("Warning: Not enough valid data points for spatial correlation analysis.")
+        return {
+            'distance_matrix': pd.DataFrame(),
+            'correlations': pd.DataFrame()
+        }
+    
     # Create spatial index
-    df['geometry'] = df.apply(
+    df_valid['geometry'] = df_valid.apply(
         lambda row: Point(row['AIRPORT_LONGITUDE'], row['AIRPORT_LATITUDE']),
         axis=1
     )
-    gdf = gpd.GeoDataFrame(df, geometry='geometry')
+    gdf = gpd.GeoDataFrame(df_valid, geometry='geometry')
     
     # Calculate distance matrix
-    coords = df[['AIRPORT_LATITUDE', 'AIRPORT_LONGITUDE']].values
+    coords = df_valid[['AIRPORT_LATITUDE', 'AIRPORT_LONGITUDE']].values
     distances = pdist(coords, metric=lambda u, v: geodesic(u, v).km)
     dist_matrix = squareform(distances)
     
     # Calculate correlation metrics for nearby airports
     nearby_correlations = pd.DataFrame()
     
-    for metric in ['DAMAGE_SCORE', 'TOTAL_COST', 'HAS_DAMAGE']:
-        values = df[metric].values
+    for metric in ['TOTAL_COST', 'INDICATED_DAMAGE']:
+        values = df_valid[metric].values
         # Calculate correlation for pairs within max_distance
         mask = dist_matrix <= max_distance_km
         np.fill_diagonal(mask, False)  # Exclude self-correlations
@@ -148,8 +161,8 @@ def calculate_spatial_correlations(
     return {
         'distance_matrix': pd.DataFrame(
             dist_matrix,
-            index=df['AIRPORT'],
-            columns=df['AIRPORT']
+            index=df_valid['AIRPORT'],
+            columns=df_valid['AIRPORT']
         ),
         'correlations': nearby_correlations
     }
@@ -159,14 +172,13 @@ def analyze_route_patterns(df: pd.DataFrame) -> pd.DataFrame:
     Analyze patterns in flight routes and enroute incidents
     """
     # Extract enroute incidents
-    enroute_incidents = df[df['ENROUTE'].notna()]
+    enroute_incidents = df[df['ENROUTE_STATE'].notna()]
     
     # Analyze patterns by route
-    route_metrics = enroute_incidents.groupby('ENROUTE').agg({
-        'INDEX NR': 'count',
-        'DAMAGE_SCORE': ['mean', 'std'],
+    route_metrics = enroute_incidents.groupby('ENROUTE_STATE').agg({
+        'INDEX_NR': 'count',
         'TOTAL_COST': ['sum', 'mean'],
-        'HAS_DAMAGE': 'mean',
+        'INDICATED_DAMAGE': 'mean',
         'HEIGHT': 'mean',
         'SPEED': 'mean'
     })
@@ -176,8 +188,7 @@ def analyze_route_patterns(df: pd.DataFrame) -> pd.DataFrame:
     
     # Calculate risk score for routes
     route_metrics['risk_score'] = (
-        route_metrics['DAMAGE_SCORE_mean'] * 
-        route_metrics['HAS_DAMAGE_mean'] * 
+        route_metrics['INDICATED_DAMAGE_mean'] * 
         np.log1p(route_metrics['TOTAL_COST_mean'])
     )
     
@@ -201,7 +212,7 @@ def identify_high_risk_zones(
     high_risk_zones = df[df['AIRPORT'].isin(high_risk_airports.index)].groupby('AIRPORT').agg({
         'SPECIES': lambda x: x.value_counts().index[0],  # Most common species
         'TIME_OF_DAY': lambda x: x.value_counts().index[0],  # Most common time
-        'PHASE_OF_FLT': lambda x: x.value_counts().index[0],  # Most common flight phase
+        'PHASE_OF_FLIGHT': lambda x: x.value_counts().index[0],  # Most common flight phase
         'HEIGHT': 'mean',
         'SPEED': 'mean',
         'TOTAL_COST': 'sum'
